@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Auther: 凌一 (Jascenn)
+# GitHub: https://github.com/Jascenn
+# Email: darkerrouge@gmail.com
+# Date：2025-06-09
+#WeChat：Help000000
+
 # Rime 备份工具 - 简单版本
 # 用法: ./simple_backup.sh [选项]
 #   无选项          - 执行标准备份
