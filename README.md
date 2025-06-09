@@ -15,17 +15,17 @@
 
 1. 下载脚本：
 ```bash
-curl -O https://raw.githubusercontent.com/yourusername/rime-backup/main/simple_backup.sh
+curl -O https://raw.githubusercontent.com/yourusername/rime-backup/main/rimebak.sh
 ```
 
 2. 添加执行权限：
 ```bash
-chmod +x simple_backup.sh
+chmod +x rimebak.sh
 ```
 
 3. 运行首次设置：
 ```bash
-./simple_backup.sh setup
+./rimebak.sh setup
 ```
 
 ## 使用方法
@@ -34,32 +34,32 @@ chmod +x simple_backup.sh
 
 - 标准备份：
 ```bash
-./simple_backup.sh
+./rimebak.sh
 ```
 
 - 创建带自定义名称的备份：
 ```bash
-./simple_backup.sh "备份说明"
+./rimebak.sh "备份说明"
 ```
 
 - 查看备份列表：
 ```bash
-./simple_backup.sh list
+./rimebak.sh list
 ```
 
 - 查看备份列表（包含完整路径）：
 ```bash
-./simple_backup.sh list full
+./rimebak.sh list full
 ```
 
 - 清理旧备份（保留最近5个）：
 ```bash
-./simple_backup.sh clean
+./rimebak.sh clean
 ```
 
 - 打开指定备份文件夹：
 ```bash
-./simple_backup.sh open <序号>
+./rimebak.sh open <序号>
 ```
 
 ### 全局命令设置
