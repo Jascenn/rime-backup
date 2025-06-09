@@ -54,6 +54,17 @@
 rimebak setup
 ```
 
+### 关于 `install.sh` 脚本
+
+`install.sh` 是一个便捷的安装脚本，专为 macOS 和 Linux 用户设计，旨在简化 RimeBak 的安装过程。它会自动执行以下操作：
+
+1.  **检查脚本存在**：确保 `rimebak.sh` 脚本与 `install.sh` 位于同一目录。
+2.  **创建安装目录**：如果 `/usr/local/bin` 目录不存在，它将尝试创建此目录（通常需要 `sudo` 权限）。`/usr/local/bin` 是系统 PATH 中的一个标准位置，方便您全局调用命令。
+3.  **复制并重命名**：将 `rimebak.sh` 脚本复制到 `/usr/local/bin/` 目录下，并将其重命名为更简洁的 `rimebak`。
+4.  **设置执行权限**：确保 `rimebak` 文件具有可执行权限，以便系统可以运行它。
+
+**通过使用 `install.sh`，您无需手动复制文件、设置权限，也无需担心 PATH 变量，从而实现 RimeBak 的快速和标准化部署。**
+
 ## 使用方法
 
 ### 基本命令
@@ -101,9 +112,9 @@ source ~/.bashrc  # 如果使用bash
 
 ## 支持的平台
 
-- macOS
-- Linux（支持iBus、Fcitx、Fcitx5）
-- Windows（需要WSL/Git Bash/Cygwin环境）
+-   **macOS**: 原生支持。脚本在 macOS 环境下能够自动检测 Rime 配置目录并正常运行。
+-   **Linux**: 广泛支持。脚本能够自动检测 iBus, Fcitx, Fcitx5 等主流输入法前端的 Rime 配置目录并运行。
+-   **Windows**: 需要类 Unix 环境。您需要在 Windows 上安装并使用 WSL (Windows Subsystem for Linux)、Git Bash 或 Cygwin 等环境来运行此 Bash 脚本。
 
 ## Windows 用户安装指南
 

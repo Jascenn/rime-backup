@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # RimeBak 安装脚本
 
 INSTALL_DIR="/usr/local/bin"

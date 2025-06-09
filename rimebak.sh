@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Auther: 凌一 (Jascenn)
 # GitHub: https://github.com/Jascenn
 # Email: darkerrouge@gmail.com
