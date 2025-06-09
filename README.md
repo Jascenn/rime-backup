@@ -102,17 +102,17 @@ MIT License
 
 ---
 
-<div align="center">
+<div align="left">
+
   [![GitHub](https://img.shields.io/badge/GitHub-Jascenn-green)](https://github.com/Jascenn)
-  [![Email](https://img.shields.io/badge/Email-联系我-blue)](mailto:您的邮箱)
+  [![Email](https://img.shields.io/badge/Email-联系我-blue)](mailto:darkerrouge@gmail.com)
   [![Stars](https://img.shields.io/github/stars/Jascenn?style=social)](https://github.com/Jascenn)
   [![Followers](https://img.shields.io/github/followers/Jascenn?style=social)](https://github.com/Jascenn)
+
 </div>
 
 <div align="center">
-  <img src="https://github-readme-stats.vercel.app/api?username=Jascenn&show_icons=true&theme=radical&hide_border=true&include_all_commits=true&count_private=true" alt="GitHub Stats" />
-</div>
 
-<div align="center">
-  <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=Jascenn&layout=compact&theme=radical&hide_border=true&langs_count=6" alt="Top Languages" />
-</div>
+| GitHub Stats | Top Languages |
+|---|---|
+| <img src="https://github-readme-stats.vercel.app/api?username=Jascenn&show_icons=true&theme=radical&hide_border=true&include_all_commits=true&count_private=true" alt="GitHub Stats" /> | <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=Jascenn&layout=compact&theme=radical&hide_border=true&langs_count=6" alt="Top Languages" /> |
