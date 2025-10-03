@@ -13,6 +13,15 @@
 - 🧾 实时日志：所有关键步骤都会输出 `[rimebak]` 日志，便于追踪
 - 🚀 全局命令：支持设置全局命令别名，方便使用
 
+## 快速上手
+
+想要一步步跟着操作？请查看：
+
+- [macOS 快速上手](docs/quickstart-macos.md)
+- [Windows 快速上手（WSL / Git Bash / Cygwin）](docs/quickstart-windows.md)
+
+仓库内还提供 `scripts/rimebak_onboarding.sh`，它会带领你完成安装、首次配置和备份。
+
 ## 安装方法
 
 ### 推荐安装方式 (macOS & Linux)
@@ -91,7 +100,7 @@ rimebak setup
 ./rimebak.sh list full
 ```
 
-- 清理旧备份（交互式选择，支持范围/关键字）：
+- 清理备份（交互式选择，可输入序号/范围/关键字）：
 ```bash
 ./rimebak.sh clean
 ```
@@ -161,7 +170,7 @@ source ~/.bashrc  # 如果使用bash
 2. 在macOS上，如果检测到iCloud云盘，会询问是否将备份保存到iCloud
 3. 备份文件命名格式：`Rime_[名称]_YYYYMMDD_HHMMSS`
 4. `clean` 会列出所有备份并接受序号/区间（如 `3-6`）/关键字（如 `latest`），选中的备份会被移动到 `备份目录/.rimebak_trash`；可通过 `./rimebak.sh undo` 回滚
-5. 可在 `~/.config/rime_backup/excludes.txt` 中追加或移除排除规则（每行一个模式，使用 `!pattern` 取消默认排除）
+5. 自带 `scripts/rimebak_onboarding.sh` 引导流程，适合新手；也可在 `~/.config/rime_backup/excludes.txt` 添加排除规则（每行一个模式，使用 `!pattern` 取消默认排除）
 
 ## 贡献
 
