@@ -653,6 +653,15 @@ open_backup_at_index() {
     if [ -n "${WSL_INTEROP:-}" ] && command -v explorer.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
         explorer.exe "$(wslpath -w "$selected_path")" >/dev/null 2>&1 && return 0
     fi
+    if [[ "$(uname -s)" == *MINGW* || "$(uname -s)" == *MSYS* || "$(uname -s)" == *CYGWIN* ]]; then
+        local windows_path="$selected_path"
+        if command -v cygpath >/dev/null 2>&1; then
+            windows_path=$(cygpath -w "$selected_path")
+        fi
+        if command -v cmd.exe >/dev/null 2>&1; then
+            cmd.exe /c start "" "$windows_path" >/dev/null 2>&1 && return 0
+        fi
+    fi
 
     echo "未找到可用于打开目录的命令，请手动访问该路径。"
     return 1

@@ -145,7 +145,9 @@ source ~/.bashrc  # 如果使用bash
     - [Cygwin 下载](https://www.cygwin.com/install.html)
 2.  **在 Git Bash/Cygwin 中运行脚本**：
     打开 Git Bash 或 Cygwin 终端，然后按照 [安装方法](#安装方法) 中的 "手动安装方式 (通用)" 步骤进行操作。
-    请注意，文件路径可能需要适应 Windows 的路径格式（例如 `C:/Users/YourUser/rimebak.sh`）。
+    - 若想在文件管理器中打开备份，脚本会自动调用 `cmd.exe /c start`，无需额外设置。
+    - 如果看到路径仍是 Unix 形式，可安装 `cygpath`（Git Bash 默认自带）以便自动转换。
+    - 请注意，命令中的路径仍可写成 Unix 风格（例如 `~/AppData/Roaming/Rime`），脚本会自动处理。
 
 ## 配置说明
 
