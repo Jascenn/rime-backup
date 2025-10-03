@@ -55,6 +55,54 @@ detect_rime_dir() {
 # 配置文件路径
 CONFIG_DIR="$HOME/.config/rime_backup"
 CONFIG_FILE="$CONFIG_DIR/config.sh"
+EXCLUDE_FILE="$CONFIG_DIR/excludes.txt"
+DEFAULT_EXCLUDES=("*.sh" ".git/" "build/")
+EXCLUDE_PATTERNS=()
+BACKUP_IN_PROGRESS=0
+BACKUP_LIST=()
+BACKUP_KEYS=()
+BACKUP_TOTAL=0
+TRASH_DIR=""
+ROLLBACK_FILE=""
+
+log_info() {
+    printf '[rimebak] %s\n' "$1"
+}
+
+cleanup_on_failure() {
+    if [ "${BACKUP_IN_PROGRESS:-0}" -eq 1 ] && [ -n "${BACKUP_DIR:-}" ] && [ -d "$BACKUP_DIR" ]; then
+        rm -rf -- "$BACKUP_DIR"
+        echo "已清理未完成的备份目录: $BACKUP_DIR" >&2
+    fi
+    BACKUP_IN_PROGRESS=0
+}
+
+load_exclude_patterns() {
+    EXCLUDE_PATTERNS=("${DEFAULT_EXCLUDES[@]}")
+
+    if [ -f "$EXCLUDE_FILE" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            line=$(printf '%s' "$line" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+            case "$line" in
+                ''|"#"*)
+                    continue
+                    ;;
+                !*)
+                    local remove_pattern=${line#!}
+                    for idx in "${!EXCLUDE_PATTERNS[@]}"; do
+                        if [ "${EXCLUDE_PATTERNS[$idx]}" = "$remove_pattern" ]; then
+                            unset 'EXCLUDE_PATTERNS[$idx]'
+                        fi
+                    done
+                    continue
+                    ;;
+            esac
+            EXCLUDE_PATTERNS+=("$line")
+        done < "$EXCLUDE_FILE"
+    fi
+
+    EXCLUDE_PATTERNS=("${EXCLUDE_PATTERNS[@]}")
+}
 
 # 设置配置
 setup_config() {
@@ -209,7 +257,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
     echo ""
     echo "首次设置完成！现在将执行标准备份..."
     echo ""
-elif [ "$1" = "setup" ]; then
+elif [ "${1:-}" = "setup" ]; then
     setup_config
     exit 0
 fi
@@ -229,12 +277,22 @@ if [ ! -d "$BACKUP_BASE" ]; then
     echo "创建备份目录: $BACKUP_BASE"
 fi
 
+load_exclude_patterns
+if [ ${#EXCLUDE_PATTERNS[@]} -gt 0 ]; then
+    log_info "排除规则: ${EXCLUDE_PATTERNS[*]}"
+else
+    log_info "未启用任何排除规则"
+fi
+
+TRASH_DIR="$BACKUP_BASE/.rimebak_trash"
+ROLLBACK_FILE="$CONFIG_DIR/rollback_last.txt"
+
 # 创建备份
 DATE_TIME=$(date +"%Y%m%d_%H%M%S")
 BACKUP_DIR=""
 
 do_backup() {
-    local backup_name="$1"
+    local backup_name="${1:-}"
     
     if [ -n "$backup_name" ]; then
         # 使用自定义名称创建备份目录
@@ -244,100 +302,402 @@ do_backup() {
         # 使用默认名称创建备份目录
         BACKUP_DIR="$BACKUP_BASE/Rime_backup_${DATE_TIME}"
     fi
-    
+
     mkdir -p "$BACKUP_DIR"
-    rsync -av --exclude="*.sh" "$SOURCE_DIR/" "$BACKUP_DIR/"
-    echo "Rime 配置已备份到 $BACKUP_DIR"
+
+    log_info "创建备份目录: $BACKUP_DIR"
+    log_info "开始同步: $SOURCE_DIR -> $BACKUP_DIR"
+
+    BACKUP_IN_PROGRESS=1
+    trap 'cleanup_on_failure' INT TERM ERR
+
+    local -a rsync_args=(-av)
+    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+        rsync_args+=("--exclude=$pattern")
+    done
+
+    log_info "执行 rsync..."
+    rsync "${rsync_args[@]}" "$SOURCE_DIR/" "$BACKUP_DIR/"
+
+    BACKUP_IN_PROGRESS=0
+    trap - INT TERM ERR
+
+    log_info "备份完成: $BACKUP_DIR"
 }
 
-# 如果是列表命令
-if [ "$1" = "list" ]; then
-    # 检查是否需要显示完整路径
-    show_full_path=false
-    if [ "$2" = "full" ]; then
-        show_full_path=true
+gather_backups() {
+    local -a entries=()
+
+    log_info "扫描备份目录: $BACKUP_BASE"
+
+    while IFS= read -r entry; do
+        local name=${entry##*/}
+        if [[ $name =~ ^Rime_(.+)_([0-9]{8})_([0-9]{6})$ ]]; then
+            local key="${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
+            entries+=("$key"$'\t'"$entry")
+        fi
+    done < <(find "$BACKUP_BASE" -mindepth 1 -maxdepth 1 -type d -print)
+
+    BACKUP_LIST=()
+    BACKUP_KEYS=()
+    BACKUP_TOTAL=0
+
+    if [ ${#entries[@]} -gt 0 ]; then
+        local sorted_entries
+        sorted_entries=$(printf '%s\n' "${entries[@]}" | LC_ALL=C sort -r)
+        while IFS=$'\t' read -r key path; do
+            [ -z "$key" ] && continue
+            BACKUP_KEYS+=("$key")
+            BACKUP_LIST+=("$path")
+        done <<<"$sorted_entries"
+        BACKUP_TOTAL=${#BACKUP_LIST[@]}
     fi
-    
+}
+
+print_backup_table() {
+    local show_full_path="$1"
+
     echo "可用的 Rime 备份 (按时间从近到远排序):"
-    cd "$BACKUP_BASE"
     echo "序号    创建时间            备份名称"
     echo "----------------------------------------------------"
-    ls -t | grep -E "Rime_(backup|.+)_[0-9]{8}_[0-9]{6}" | 
-    while read -r backup_name; do
-        # 提取日期和时间信息
+
+    if [ "$BACKUP_TOTAL" -eq 0 ]; then
+        echo "暂无备份"
+        return 0
+    fi
+
+    local index=0
+    for full_path in "${BACKUP_LIST[@]}"; do
+        local backup_name=${full_path##*/}
         if [[ $backup_name =~ _([0-9]{8})_([0-9]{6})$ ]]; then
-            date_part=${BASH_REMATCH[1]}
-            time_part=${BASH_REMATCH[2]}
-            
-            # 格式化日期和时间
-            formatted_date="${date_part:0:4}-${date_part:4:2}-${date_part:6:2} ${time_part:0:2}:${time_part:2:2}:${time_part:4:2}"
-            
-            # 提取备份名称
-            if [[ $backup_name =~ ^Rime_backup_ ]]; then
-                display_name="标准备份"
-            else
-                display_name=$(echo "$backup_name" | sed -E 's/Rime_(.+)_[0-9]{8}_[0-9]{6}/\1/' | tr '_' ' ')
+            local date_part=${BASH_REMATCH[1]}
+            local time_part=${BASH_REMATCH[2]}
+            local formatted_date="${date_part:0:4}-${date_part:4:2}-${date_part:6:2} ${time_part:0:2}:${time_part:2:2}:${time_part:4:2}"
+            local display_name="标准备份"
+
+            if [[ $backup_name != Rime_backup_* ]]; then
+                display_name=$(printf '%s' "$backup_name" | sed -E 's/^Rime_(.+)_[0-9]{8}_[0-9]{6}$/\1/' | tr '_' ' ')
             fi
-            
-            printf "%-8s %-19s %s\n" "[$((++i))]" "$formatted_date" "$display_name"
-            
-            # 如果需要显示完整路径
-            if [ "$show_full_path" = true ]; then
-                full_path="$BACKUP_BASE/$backup_name"
+
+            printf "%-8s %-19s %s\n" "[$((++index))]" "$formatted_date" "$display_name"
+
+            if [ "$show_full_path" = "true" ]; then
                 echo "    路径: $full_path"
             fi
         fi
     done
-    
+}
+
+list_backups() {
+    local show_full_path="$1"
+
+    gather_backups
+
+    log_info "共找到 $BACKUP_TOTAL 个备份"
+
+    print_backup_table "$show_full_path"
+
+    if [ "$BACKUP_TOTAL" -gt 0 ]; then
+        echo ""
+        echo "提示: 使用 './rimebak.sh open 序号' 可打开指定备份文件夹"
+        if [ "$show_full_path" != "true" ]; then
+            echo "提示: 使用 './rimebak.sh list full' 可查看备份完整路径"
+        fi
+    fi
+}
+
+clean_old_backups() {
+    gather_backups
+
+    if [ "$BACKUP_TOTAL" -le 1 ]; then
+        echo "当前备份数量不超过 1，无需清理"
+        return 0
+    fi
+
+    print_backup_table "false"
     echo ""
-    echo "提示: 使用 './rimebak.sh open 序号' 可打开指定备份文件夹"
-    if [ "$show_full_path" = false ]; then
-        echo "提示: 使用 './rimebak.sh list full' 可查看备份完整路径"
+    log_info "输入要删除的备份序号（空格分隔，可使用 latest/oldest/-1 等关键字），直接回车取消"
+    local selection
+    if ! IFS= read -r selection; then
+        echo "未收到输入，已取消清理"
+        return 0
     fi
-    
-    exit 0
+
+    if [ -z "$selection" ]; then
+        echo "已取消清理"
+        return 0
+    fi
+
+    local -a candidates=()
+    for token in $selection; do
+        if [[ "$token" =~ ^[Aa][Ll][Ll]$ ]]; then
+            candidates=()
+            local i
+            for ((i = 1; i <= BACKUP_TOTAL; i++)); do
+                candidates+=("$i")
+            done
+            break
+        fi
+
+        if [[ "$token" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            local start=${BASH_REMATCH[1]}
+            local end=${BASH_REMATCH[2]}
+            if [ "$start" -gt "$end" ]; then
+                local tmp=$start
+                start=$end
+                end=$tmp
+            fi
+            local i
+            for ((i = start; i <= end; i++)); do
+                candidates+=("$i")
+            done
+            continue
+        fi
+
+        local idx
+        if ! idx=$(resolve_backup_index "$token"); then
+            echo "跳过无效输入: $token"
+            continue
+        fi
+
+        candidates+=("$idx")
+    done
+
+    if [ ${#candidates[@]} -eq 0 ]; then
+        echo "未选择有效备份，已取消清理"
+        return 0
+    fi
+
+    local unique_indexes
+    unique_indexes=$(printf '%s\n' "${candidates[@]}" | LC_ALL=C sort -n -u)
+
+    local -a final_indexes=()
+    while IFS= read -r idx_value; do
+        [ -z "$idx_value" ] && continue
+        if [ "$idx_value" -lt 1 ] || [ "$idx_value" -gt "$BACKUP_TOTAL" ]; then
+            echo "跳过越界序号: $idx_value"
+            continue
+        fi
+        final_indexes+=("$idx_value")
+    done <<<"$unique_indexes"
+
+    if [ ${#final_indexes[@]} -eq 0 ]; then
+        echo "未选择有效备份，已取消清理"
+        return 0
+    fi
+
+    echo "以下备份将被删除:"
+    for idx in "${final_indexes[@]}"; do
+        local path=${BACKUP_LIST[$((idx-1))]}
+        echo "  [$idx] $path"
+    done
+
+    local confirm
+    if ! read -r -p "确认删除? (y/N): " confirm; then
+        echo "未收到输入，已取消清理"
+        return 0
+    fi
+    confirm=${confirm:-n}
+    confirm=$(printf '%s' "$confirm" | tr '[:upper:]' '[:lower:]')
+    if [ "$confirm" != "y" ] && [ "$confirm" != "yes" ]; then
+        echo "已取消清理"
+        return 0
+    fi
+
+    mkdir -p "$TRASH_DIR"
+    : > "$ROLLBACK_FILE"
+
+    local moved_any=0
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+
+    for idx in "${final_indexes[@]}"; do
+        local path=${BACKUP_LIST[$((idx-1))]}
+        local base_name=${path##*/}
+        local target="$TRASH_DIR/$base_name"
+
+        while [ -e "$target" ]; do
+            target="$TRASH_DIR/${base_name}_${timestamp}_$RANDOM"
+        done
+
+        if mv "$path" "$target"; then
+            log_info "已移动备份 [$idx] 到临时回收站: $target"
+            printf '%s|%s\n' "$target" "$path" >> "$ROLLBACK_FILE"
+            moved_any=1
+        else
+            echo "移动失败，跳过: $path" >&2
+        fi
+    done
+
+    if [ "$moved_any" -eq 1 ]; then
+        log_info "清理完成，所有选中备份已移动到: $TRASH_DIR"
+        log_info "如需恢复，可运行 './rimebak.sh undo'"
+    else
+        rm -f "$ROLLBACK_FILE"
+        echo "未成功移动任何备份"
+    fi
+}
+
+undo_cleanup() {
+    if [ ! -f "$ROLLBACK_FILE" ] || ! grep -q '.' "$ROLLBACK_FILE" 2>/dev/null; then
+        echo "没有可回滚的记录" >&2
+        return 1
+    fi
+
+    log_info "开始回滚上一次清理"
+    local restored=0
+    local failed=0
+
+    while IFS='|' read -r src dest; do
+        [ -z "$src" ] && continue
+        if [ ! -d "$src" ]; then
+            echo "无法恢复: 临时目录不存在 -> $src" >&2
+            failed=$((failed + 1))
+            continue
+        fi
+
+        local target="$dest"
+        if [ -d "$target" ]; then
+            local base_name=${target##*/}
+            target="$BACKUP_BASE/${base_name}_restore_$(date +%Y%m%d_%H%M%S)"
+            echo "目标已存在，改为恢复到: $target" >&2
+        fi
+
+        if mv "$src" "$target"; then
+            log_info "已恢复备份: $target"
+            restored=$((restored + 1))
+        else
+            echo "恢复失败: $src" >&2
+            failed=$((failed + 1))
+        fi
+    done < "$ROLLBACK_FILE"
+
+    rm -f "$ROLLBACK_FILE"
+
+    if [ "$restored" -gt 0 ]; then
+        log_info "回滚完成，共恢复 $restored 个备份"
+    fi
+
+    if [ "$failed" -gt 0 ]; then
+        echo "有 $failed 个备份未能恢复，请手动检查 $TRASH_DIR" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+resolve_backup_index() {
+    local token="$1"
+
+    if [ -z "$token" ] || [ "$token" = "latest" ]; then
+        echo 1
+        return 0
+    fi
+
+    if [ "$token" = "oldest" ]; then
+        echo "$BACKUP_TOTAL"
+        return 0
+    fi
+
+    if [[ $token =~ ^-[0-9]+$ ]]; then
+        local offset=${token#-}
+        if [ "$offset" -eq 0 ]; then
+            echo "错误: 序号 0 无效。" >&2
+            return 1
+        fi
+        local index=$((BACKUP_TOTAL - offset + 1))
+        echo "$index"
+        return 0
+    fi
+
+    if [[ $token =~ ^[0-9]+$ ]]; then
+        echo "$token"
+        return 0
+    fi
+
+    echo "错误: 不支持的序号或关键字 '$token'。可用: latest, oldest, 正整数, -正整数。" >&2
+    return 1
+}
+
+open_backup_at_index() {
+    local token="$1"
+
+    gather_backups
+
+    if [ "${BACKUP_TOTAL:-0}" -eq 0 ]; then
+        echo "暂无可用备份" >&2
+        return 1
+    fi
+
+    local target_index
+    if ! target_index=$(resolve_backup_index "$token"); then
+        return 1
+    fi
+
+    if ! [[ $target_index =~ ^[0-9]+$ ]] || [ "$target_index" -lt 1 ] || [ "$target_index" -gt "$BACKUP_TOTAL" ]; then
+        echo "错误: 未找到序号 $target_index 对应的备份。请运行 './rimebak.sh list' 查看可用备份列表 (共 $BACKUP_TOTAL 个)。" >&2
+        return 1
+    fi
+
+    local selected_path=${BACKUP_LIST[$((target_index-1))]}
+    echo "打开备份文件夹: $selected_path"
+
+    if command -v open >/dev/null 2>&1; then
+        open "$selected_path" >/dev/null 2>&1 && return 0
+    fi
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$selected_path" >/dev/null 2>&1 && return 0
+    fi
+    if command -v wslview >/dev/null 2>&1; then
+        wslview "$selected_path" >/dev/null 2>&1 && return 0
+    fi
+    if [ -n "${WSL_INTEROP:-}" ] && command -v explorer.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
+        explorer.exe "$(wslpath -w "$selected_path")" >/dev/null 2>&1 && return 0
+    fi
+
+    echo "未找到可用于打开目录的命令，请手动访问该路径。"
+    return 1
+}
+
+command="${1:-}"
+if [ $# -gt 0 ]; then
+    shift
 fi
 
-# 如果是清理命令
-if [ "$1" = "clean" ]; then
-    do_backup
-    cd "$BACKUP_BASE"
-    ls -t | grep Rime_backup_ | tail -n +6 | xargs -I {} rm -rf {}
-    echo "已清理旧备份，保留最近 5 个备份"
-    exit 0
-fi
-
-# 如果是打开命令
-if [ "$1" = "open" ]; then
-    if [ -z "$2" ]; then
-        echo "错误: 未指定备份序号。用法: ./rimebak.sh open <序号>"
-        exit 1
-    fi
-    
-    # 获取序号对应的备份路径
-    cd "$BACKUP_BASE"
-    backup_path=$(ls -t | grep -E "Rime_(backup|.+)_[0-9]{8}_[0-9]{6}" | sed -n "$2p")
-    
-    if [ -z "$backup_path" ]; then
-        echo "错误: 未找到序号 $2 对应的备份。请运行 './rimebak.sh list' 查看可用备份列表。"
-        exit 1
-    fi
-    
-    full_path="$BACKUP_BASE/$backup_path"
-    echo "打开备份文件夹: $full_path"
-    open "$full_path"
-    exit 0
-fi
-
-# 默认操作：备份
-if [ -n "$1" ]; then
-    # 使用自定义名称备份
-    do_backup "$1"
-    echo "已创建带自定义名称的备份: $1"
-else
-    # 标准备份
-    do_backup
-fi
+case "$command" in
+    "")
+        do_backup
+        ;;
+    list)
+        show_full="false"
+        if [ "${1:-}" = "full" ]; then
+            show_full="true"
+        fi
+        list_backups "$show_full"
+        exit 0
+        ;;
+    clean)
+        do_backup
+        clean_old_backups
+        exit 0
+        ;;
+    undo)
+        if undo_cleanup; then
+            exit 0
+        else
+            exit 1
+        fi
+        ;;
+    open)
+        if ! open_backup_at_index "${1:-}"; then
+            exit 1
+        fi
+        exit 0
+        ;;
+    *)
+        do_backup "$command"
+        echo "已创建带自定义名称的备份: $command"
+        ;;
+esac
 
 echo "！提示：运行 './rimebak.sh list' 查看所有备份"
 echo "！提示：运行 './rimebak.sh clean' 清理旧备份"
