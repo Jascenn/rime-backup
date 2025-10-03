@@ -57,6 +57,9 @@ cd "$HOME"
 git clone git@github.com:Jascenn/rime-backup.git
 cd rime-backup
 bash scripts/rimebak_onboarding.sh
+# 若想生成独立 .exe 供用户双击，可在 PowerShell 中运行：
+#   powershell -ExecutionPolicy Bypass -File scripts\build-onboarding-exe.ps1
+# 前提：已安装 ps2exe（Install-Module ps2exe）
 ```
 
 引导脚本会：
@@ -90,6 +93,7 @@ bash scripts/rimebak_onboarding.sh
 | `cmd.exe /c start` 未能打开目录 | 确保终端有权限访问该路径；可手动在资源管理器输入备份目录名 |
 | 想排除某些文件夹 | 编辑 `~/.config/rime_backup/excludes.txt`，每行一个模式，使用 `!pattern` 取消默认排除 |
 | 清理后想恢复 | 运行 `rimebak undo`，或手动检查 `<备份目录>/.rimebak_trash` |
+| 想生成可执行文件 | PowerShell 执行 `powershell -ExecutionPolicy Bypass -File scripts\build-onboarding-exe.ps1`，需先 `Install-Module ps2exe` |
 
 ## 下一步
 

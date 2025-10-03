@@ -20,7 +20,10 @@
 - [macOS 快速上手](docs/quickstart-macos.md)
 - [Windows 快速上手（WSL / Git Bash / Cygwin）](docs/quickstart-windows.md)
 
-仓库内还提供 `scripts/rimebak_onboarding.sh`，它会带领你完成安装、首次配置和备份。
+仓库内提供：
+- `scripts/rimebak_onboarding.sh`（跨平台 Bash 引导）
+- `scripts/rimebak_onboarding.ps1` 和 `rimebak_onboarding.bat`（Windows 快速入口）
+- 需要 `.exe` 安装器？在 PowerShell 中运行 `powershell -ExecutionPolicy Bypass -File scripts\build-onboarding-exe.ps1`（需先 `Install-Module ps2exe`）即可生成
 
 ## 安装方法
 
