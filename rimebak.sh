@@ -8,14 +8,26 @@ set -euo pipefail
 # Date：2025-06-09
 # WeChat：Help000000
 
-# Rime 备份工具 - 简单版本
-# 用法: ./rimebak.sh [选项]
-#   无选项          - 执行标准备份
-#   clean           - 备份并清理旧备份，只保留最近5个
-#   list            - 列出所有备份 (简洁版)
-#   list full       - 列出所有备份 (包含完整路径)
-#   open 序号      - 打开指定序号的备份文件夹 (例如: ./rimebak.sh open 1)
-#   备份名称        - 使用指定名称创建备份 (例如: ./rimebak.sh '修改配置前')
+# Rime 备份工具
+VERSION="2.0.0"
+
+# ============================================================================
+# 颜色定义 (参考 Mole 项目风格)
+# ============================================================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+GRAY='\033[0;90m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# 全局选项
+DRY_RUN=false
+DEBUG=false
+INTERACTIVE=false
 # 自动判断不同设备的Rime设置文件夹
 detect_rime_dir() {
     # 检测操作系统类型
@@ -65,8 +77,223 @@ BACKUP_TOTAL=0
 TRASH_DIR=""
 ROLLBACK_FILE=""
 
+# ============================================================================
+# 增强日志系统
+# ============================================================================
 log_info() {
-    printf '[rimebak] %s\n' "$1"
+    printf "${CYAN}[rimebak]${NC} %s\n" "$1"
+}
+
+log_success() {
+    printf "${GREEN}[rimebak]${NC} ✓ %s\n" "$1"
+}
+
+log_warn() {
+    printf "${YELLOW}[rimebak]${NC} ⚠ %s\n" "$1"
+}
+
+log_error() {
+    printf "${RED}[rimebak]${NC} ✗ %s\n" "$1" >&2
+}
+
+log_debug() {
+    if [[ "$DEBUG" == "true" ]]; then
+        printf "${GRAY}[debug]${NC} %s\n" "$1"
+    fi
+}
+
+# ============================================================================
+# ASCII Art Banner
+# ============================================================================
+show_banner() {
+    printf "${PURPLE}"
+    cat <<'EOF'
+   ____  _                ____        _    
+  |  _ \(_)_ __ ___   ___| __ )  __ _| | __
+  | |_) | | '_ ` _ \ / _ \  _ \ / _` | |/ /
+  |  _ <| | | | | | |  __/ |_) | (_| |   < 
+  |_| \_\_|_| |_| |_|\___|____/ \__,_|_|\_\
+EOF
+    printf "${NC}"
+    printf "  ${GREEN}Rime 输入法配置备份工具${NC}  ${GRAY}v%s${NC}\n\n" "$VERSION"
+}
+
+# ============================================================================
+# 帮助信息
+# ============================================================================
+show_help() {
+    show_banner
+    printf "${BLUE}命令${NC}\n"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak" "进入交互式菜单"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak <备份名称>" "创建带名称的备份"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak list [full]" "列出所有备份"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak restore <序号>" "恢复指定备份"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak clean" "交互式清理备份"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak undo" "撤销上次清理"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak open <序号>" "打开指定备份"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak stats" "查看备份统计"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak setup" "重新配置"
+    echo
+    printf "${BLUE}Git 同步${NC}\n"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak git init" "初始化 Git 仓库"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak git remote <url>" "设置远程仓库"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak git sync" "提交并推送"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak git pull" "从远程拉取"
+    printf "  ${GREEN}%-28s${NC} %s\n" "rimebak git status" "查看 Git 状态"
+    echo
+    printf "${BLUE}选项${NC}\n"
+    printf "  ${GREEN}%-28s${NC} %s\n" "--dry-run" "预览操作，不实际执行"
+    printf "  ${GREEN}%-28s${NC} %s\n" "--debug" "显示调试信息"
+    printf "  ${GREEN}%-28s${NC} %s\n" "--help, -h" "显示帮助"
+    printf "  ${GREEN}%-28s${NC} %s\n" "--version, -v" "显示版本"
+    echo
+    printf "${BLUE}示例${NC}\n"
+    printf "  ${GRAY}rimebak "升级前备份"${NC}        创建带描述的备份\n"
+    printf "  ${GRAY}rimebak restore latest${NC}     恢复最新备份\n"
+    printf "  ${GRAY}rimebak git sync${NC}           同步到 GitHub\n"
+    echo
+}
+
+show_version() {
+    printf "RimeBak v%s\n" "$VERSION"
+    printf "系统: %s\n" "$(uname -s)"
+    printf "架构: %s\n" "$(uname -m)"
+}
+
+# ============================================================================
+# 交互式菜单
+# ============================================================================
+hide_cursor() { printf '\033[?25l'; }
+show_cursor() { printf '\033[?25h'; }
+
+show_menu_option() {
+    local num="$1"
+    local text="$2"
+    local selected="$3"
+    if [[ "$selected" == "true" ]]; then
+        printf "  ${CYAN}▶${NC} ${BOLD}[%s] %s${NC}" "$num" "$text"
+    else
+        printf "    [%s] %s" "$num" "$text"
+    fi
+}
+
+read_key() {
+    local key
+    IFS= read -rsn1 key 2>/dev/null || return 1
+    if [[ "$key" == $'\x1b' ]]; then
+        read -rsn2 -t 0.1 key 2>/dev/null || true
+        case "$key" in
+            '[A') echo "UP" ;;
+            '[B') echo "DOWN" ;;
+            *) echo "OTHER" ;;
+        esac
+    elif [[ "$key" == "" ]]; then
+        echo "ENTER"
+    elif [[ "$key" =~ ^[1-6]$ ]]; then
+        echo "NUM:$key"
+    elif [[ "$key" == "q" || "$key" == "Q" ]]; then
+        echo "QUIT"
+    elif [[ "$key" == "h" || "$key" == "H" ]]; then
+        echo "HELP"
+    else
+        echo "OTHER"
+    fi
+}
+
+show_main_menu() {
+    local selected="${1:-1}"
+    
+    printf '\033[H\033[2J'  # 清屏
+    show_banner
+    
+    printf "${BLUE}选择操作${NC}\n\n"
+    printf "%s\n" "$(show_menu_option 1 "备份     创建新备份" "$([[ $selected -eq 1 ]] && echo true || echo false)")"
+    printf "%s\n" "$(show_menu_option 2 "列表     查看所有备份" "$([[ $selected -eq 2 ]] && echo true || echo false)")"
+    printf "%s\n" "$(show_menu_option 3 "清理     删除旧备份" "$([[ $selected -eq 3 ]] && echo true || echo false)")"
+    printf "%s\n" "$(show_menu_option 4 "恢复     撤销上次清理" "$([[ $selected -eq 4 ]] && echo true || echo false)")"
+    printf "%s\n" "$(show_menu_option 5 "打开     在 Finder 中查看" "$([[ $selected -eq 5 ]] && echo true || echo false)")"
+    printf "%s\n" "$(show_menu_option 6 "设置     重新配置" "$([[ $selected -eq 6 ]] && echo true || echo false)")"
+    echo
+    printf "  ${GRAY}↑↓ 选择  |  Enter/数字 确认  |  H 帮助  |  Q 退出${NC}\n"
+}
+
+interactive_menu() {
+    # 检查是否为 TTY
+    if [[ ! -t 0 || ! -t 1 ]]; then
+        log_warn "非交互式环境，执行标准备份"
+        do_backup
+        return
+    fi
+    
+    local current=1
+    trap 'show_cursor; exit 0' INT TERM
+    hide_cursor
+    
+    while true; do
+        show_main_menu $current
+        
+        local key
+        if ! key=$(read_key); then
+            continue
+        fi
+        
+        case "$key" in
+            "UP") ((current > 1)) && ((current--)) ;;
+            "DOWN") ((current < 6)) && ((current++)) ;;
+            "ENTER")
+                show_cursor
+                printf '\033[H\033[2J'
+                case $current in
+                    1) do_backup ;;
+                    2) list_backups "false" ;;
+                    3) do_backup; clean_old_backups ;;
+                    4) undo_cleanup ;;
+                    5) 
+                        gather_backups
+                        if [[ $BACKUP_TOTAL -gt 0 ]]; then
+                            open_backup_at_index "latest"
+                        else
+                            log_warn "暂无备份"
+                        fi
+                        ;;
+                    6) setup_config ;;
+                esac
+                exit 0
+                ;;
+            "NUM:"*)
+                local num=${key#NUM:}
+                show_cursor
+                printf '\033[H\033[2J'
+                case $num in
+                    1) do_backup ;;
+                    2) list_backups "false" ;;
+                    3) do_backup; clean_old_backups ;;
+                    4) undo_cleanup ;;
+                    5)
+                        gather_backups
+                        if [[ $BACKUP_TOTAL -gt 0 ]]; then
+                            open_backup_at_index "latest"
+                        else
+                            log_warn "暂无备份"
+                        fi
+                        ;;
+                    6) setup_config ;;
+                esac
+                exit 0
+                ;;
+            "QUIT")
+                show_cursor
+                printf '\033[H\033[2J'
+                exit 0
+                ;;
+            "HELP")
+                show_cursor
+                printf '\033[H\033[2J'
+                show_help
+                exit 0
+                ;;
+        esac
+    done
 }
 
 cleanup_on_failure() {
@@ -667,14 +894,345 @@ open_backup_at_index() {
     return 1
 }
 
+# ============================================================================
+# 恢复备份
+# ============================================================================
+do_restore() {
+    local target="${1:-latest}"
+    
+    gather_backups
+    
+    if [ "$BACKUP_TOTAL" -eq 0 ]; then
+        log_error "暂无可用备份"
+        return 1
+    fi
+    
+    local target_index
+    if ! target_index=$(resolve_backup_index "$target"); then
+        return 1
+    fi
+    
+    if ! [[ $target_index =~ ^[0-9]+$ ]] || [ "$target_index" -lt 1 ] || [ "$target_index" -gt "$BACKUP_TOTAL" ]; then
+        log_error "未找到序号 $target_index 对应的备份"
+        return 1
+    fi
+    
+    local backup_path="${BACKUP_LIST[$((target_index-1))]}"
+    local backup_name="${backup_path##*/}"
+    
+    log_info "准备恢复备份: $backup_name"
+    log_info "源: $backup_path"
+    log_info "目标: $SOURCE_DIR"
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_warn "[预览模式] 将执行以下操作:"
+        log_info "  1. 创建当前配置的自动备份"
+        log_info "  2. 将 $backup_name 恢复到 $SOURCE_DIR"
+        log_warn "这是预览模式，未执行任何操作"
+        return 0
+    fi
+    
+    # 恢复前自动备份当前配置
+    log_info "恢复前创建当前配置备份..."
+    local old_date_time="$DATE_TIME"
+    DATE_TIME=$(date +"%Y%m%d_%H%M%S")
+    do_backup "恢复前自动备份"
+    DATE_TIME="$old_date_time"
+    
+    # 执行恢复
+    log_info "开始恢复..."
+    rsync -av --delete "$backup_path/" "$SOURCE_DIR/"
+    
+    log_success "已成功恢复备份: $backup_name"
+    log_info "请重新部署 Rime 以应用更改"
+    
+    return 0
+}
+
+# ============================================================================
+# Git 同步功能
+# ============================================================================
+git_init() {
+    if [ -d "$BACKUP_BASE/.git" ]; then
+        log_warn "Git 仓库已存在"
+        return 0
+    fi
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[预览模式] 将在 $BACKUP_BASE 初始化 Git 仓库"
+        return 0
+    fi
+    
+    cd "$BACKUP_BASE" || return 1
+    git init
+    
+    # 创建 .gitignore
+    cat > .gitignore << 'EOF'
+.rimebak_trash/
+*.log
+.DS_Store
+EOF
+    
+    git add .
+    git commit -m "Initial commit: RimeBak backup repository"
+    
+    log_success "Git 仓库初始化完成"
+    log_info "现在可以使用 'rimebak git remote <url>' 设置远程仓库"
+}
+
+git_remote() {
+    local url="$1"
+    
+    if [ ! -d "$BACKUP_BASE/.git" ]; then
+        log_error "请先运行 'rimebak git init' 初始化仓库"
+        return 1
+    fi
+    
+    if [ -z "$url" ]; then
+        log_error "请提供远程仓库 URL"
+        log_info "用法: rimebak git remote <url>"
+        return 1
+    fi
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[预览模式] 将设置远程仓库: $url"
+        return 0
+    fi
+    
+    cd "$BACKUP_BASE" || return 1
+    
+    if git remote get-url origin >/dev/null 2>&1; then
+        git remote set-url origin "$url"
+        log_info "已更新远程仓库 URL"
+    else
+        git remote add origin "$url"
+        log_info "已添加远程仓库"
+    fi
+    
+    log_success "远程仓库设置完成: $url"
+}
+
+git_sync() {
+    if [ ! -d "$BACKUP_BASE/.git" ]; then
+        log_error "请先运行 'rimebak git init' 初始化仓库"
+        return 1
+    fi
+    
+    cd "$BACKUP_BASE" || return 1
+    
+    local changes=$(git status --porcelain)
+    
+    if [ -z "$changes" ]; then
+        log_info "没有新的更改需要同步"
+        return 0
+    fi
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[预览模式] 将提交以下更改:"
+        git status --short
+        return 0
+    fi
+    
+    local commit_msg="Backup: $(date '+%Y-%m-%d %H:%M:%S')"
+    
+    git add .
+    git commit -m "$commit_msg"
+    
+    if git remote get-url origin >/dev/null 2>&1; then
+        log_info "推送到远程仓库..."
+        if git push -u origin main 2>/dev/null || git push -u origin master 2>/dev/null; then
+            log_success "已推送到远程仓库"
+        else
+            log_warn "推送失败，请检查远程仓库配置"
+        fi
+    else
+        log_warn "未设置远程仓库，仅本地提交"
+        log_info "使用 'rimebak git remote <url>' 设置远程仓库"
+    fi
+    
+    log_success "Git 同步完成"
+}
+
+git_pull() {
+    if [ ! -d "$BACKUP_BASE/.git" ]; then
+        log_error "请先运行 'rimebak git init' 初始化仓库"
+        return 1
+    fi
+    
+    cd "$BACKUP_BASE" || return 1
+    
+    if ! git remote get-url origin >/dev/null 2>&1; then
+        log_error "未设置远程仓库"
+        return 1
+    fi
+    
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[预览模式] 将从远程仓库拉取"
+        return 0
+    fi
+    
+    git pull origin main 2>/dev/null || git pull origin master 2>/dev/null
+    log_success "已从远程仓库拉取"
+}
+
+git_status() {
+    if [ ! -d "$BACKUP_BASE/.git" ]; then
+        log_error "请先运行 'rimebak git init' 初始化仓库"
+        return 1
+    fi
+    
+    cd "$BACKUP_BASE" || return 1
+    
+    echo ""
+    printf "${BLUE}Git 状态${NC}\n"
+    echo "----------------------------------------"
+    
+    local remote_url=$(git remote get-url origin 2>/dev/null || echo "未设置")
+    printf "远程仓库: %s\n" "$remote_url"
+    
+    local branch=$(git branch --show-current 2>/dev/null || echo "无")
+    printf "当前分支: %s\n" "$branch"
+    
+    local last_commit=$(git log -1 --format="%h %s" 2>/dev/null || echo "无提交")
+    printf "最新提交: %s\n" "$last_commit"
+    
+    echo ""
+    git status --short
+}
+
+do_git() {
+    local subcmd="${1:-}"
+    shift 2>/dev/null || true
+    
+    case "$subcmd" in
+        init)
+            git_init
+            ;;
+        remote)
+            git_remote "${1:-}"
+            ;;
+        sync)
+            git_sync
+            ;;
+        pull)
+            git_pull
+            ;;
+        status|"")
+            git_status
+            ;;
+        *)
+            log_error "未知 git 子命令: $subcmd"
+            echo ""
+            printf "${BLUE}可用命令${NC}\n"
+            printf "  ${GREEN}rimebak git init${NC}          初始化 Git 仓库\n"
+            printf "  ${GREEN}rimebak git remote <url>${NC}  设置远程仓库\n"
+            printf "  ${GREEN}rimebak git sync${NC}          提交并推送\n"
+            printf "  ${GREEN}rimebak git pull${NC}          从远程拉取\n"
+            printf "  ${GREEN}rimebak git status${NC}        查看状态\n"
+            return 1
+            ;;
+    esac
+}
+
+# ============================================================================
+# 备份统计
+# ============================================================================
+show_stats() {
+    gather_backups
+    
+    echo ""
+    show_banner
+    printf "${BLUE}备份统计${NC}\n"
+    echo "========================================"
+    
+    printf "备份总数:   ${GREEN}%d${NC} 个\n" "$BACKUP_TOTAL"
+    
+    if [ "$BACKUP_TOTAL" -eq 0 ]; then
+        echo "暂无备份数据"
+        return 0
+    fi
+    
+    # 最新和最早备份
+    local latest="${BACKUP_LIST[0]}"
+    local oldest="${BACKUP_LIST[$((BACKUP_TOTAL-1))]}"
+    
+    local latest_name="${latest##*/}"
+    local oldest_name="${oldest##*/}"
+    
+    if [[ $latest_name =~ _([0-9]{8})_([0-9]{6})$ ]]; then
+        local date_str="${BASH_REMATCH[1]}"
+        printf "最新备份:   %s-%s-%s\n" "${date_str:0:4}" "${date_str:4:2}" "${date_str:6:2}"
+    fi
+    
+    if [[ $oldest_name =~ _([0-9]{8})_([0-9]{6})$ ]]; then
+        local date_str="${BASH_REMATCH[1]}"
+        printf "最早备份:   %s-%s-%s\n" "${date_str:0:4}" "${date_str:4:2}" "${date_str:6:2}"
+    fi
+    
+    # 计算总大小
+    local total_size=$(du -sh "$BACKUP_BASE" 2>/dev/null | cut -f1)
+    printf "总大小:     ${YELLOW}%s${NC}\n" "$total_size"
+    
+    # Git 状态
+    if [ -d "$BACKUP_BASE/.git" ]; then
+        printf "Git 状态:   ${GREEN}已启用${NC}\n"
+        local remote_url=$(cd "$BACKUP_BASE" && git remote get-url origin 2>/dev/null || echo "")
+        if [ -n "$remote_url" ]; then
+            printf "远程仓库:   %s\n" "$remote_url"
+        fi
+    else
+        printf "Git 状态:   ${GRAY}未启用${NC}\n"
+    fi
+    
+    echo "========================================"
+}
+
+# ============================================================================
+# 命令行解析
+# ============================================================================
+
+# 解析全局选项
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --debug)
+            DEBUG=true
+            shift
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        --version|-v)
+            show_version
+            exit 0
+            ;;
+        *)
+            POSITIONAL_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+set -- "${POSITIONAL_ARGS[@]}"
+
 command="${1:-}"
 if [ $# -gt 0 ]; then
     shift
 fi
 
+log_debug "命令: $command"
+log_debug "DRY_RUN: $DRY_RUN"
+log_debug "DEBUG: $DEBUG"
+
 case "$command" in
     "")
-        do_backup
+        # 无参数时进入交互菜单
+        interactive_menu
         ;;
     list)
         show_full="false"
@@ -684,7 +1242,18 @@ case "$command" in
         list_backups "$show_full"
         exit 0
         ;;
+    restore)
+        do_restore "${1:-latest}"
+        exit 0
+        ;;
     clean)
+        if [[ "$DRY_RUN" == "true" ]]; then
+            gather_backups
+            log_info "[预览模式] 当前共有 $BACKUP_TOTAL 个备份"
+            print_backup_table "false"
+            log_warn "这是预览模式，未执行任何操作"
+            exit 0
+        fi
         do_backup
         clean_old_backups
         exit 0
@@ -702,12 +1271,27 @@ case "$command" in
         fi
         exit 0
         ;;
+    git)
+        do_git "$@"
+        exit 0
+        ;;
+    stats)
+        show_stats
+        exit 0
+        ;;
     *)
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_info "[预览模式] 将创建备份: Rime_${command// /_}_$DATE_TIME"
+            log_info "源目录: $SOURCE_DIR"
+            log_info "目标目录: $BACKUP_BASE"
+            log_warn "这是预览模式，未执行任何操作"
+            exit 0
+        fi
         do_backup "$command"
-        echo "已创建带自定义名称的备份: $command"
+        log_success "已创建带自定义名称的备份: $command"
         ;;
 esac
 
-echo "！提示：运行 './rimebak.sh list' 查看所有备份"
-echo "！提示：运行 './rimebak.sh clean' 清理旧备份"
-echo "！提示：运行 './rimebak.sh 备份名称' 创建带自定义名称的备份"
+echo ""
+printf "${GRAY}提示：运行 'rimebak --help' 查看所有命令${NC}\n"
+
