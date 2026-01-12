@@ -2,7 +2,7 @@ class Rimebak < Formula
   desc "Rime input method configuration backup and restore tool"
   homepage "https://github.com/Jascenn/rime-backup"
   url "https://github.com/Jascenn/rime-backup/archive/refs/tags/v2.1.0.tar.gz"
-  sha256 "REPLACE_WITH_ACTUAL_SHA256"
+  sha256 "44cd8c506b90a1d2c913188fd4e9d0350e6589afe5fff77de118651a0caee160"
   license "MIT"
   head "https://github.com/Jascenn/rime-backup.git", branch: "main"
 
