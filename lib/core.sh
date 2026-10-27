@@ -18,7 +18,7 @@ NC='\033[0m'
 DRY_RUN=${DRY_RUN:-false}
 DEBUG=${DEBUG:-false}
 INTERACTIVE=${INTERACTIVE:-false}
-VERSION="3.0.0"
+VERSION="3.0.1"
 
 # 配置文件路径
 CONFIG_DIR="$HOME/.config/rime_backup"

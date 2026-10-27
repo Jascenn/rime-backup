@@ -78,7 +78,7 @@ gather_backups() {
                 local key="${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
                 standard_entries+=("$key"$'\t'"$entry")
             # 格式2: 旧格式 Rime-* 或 Rime_*（无时间戳，排除子目录中的 Rime_Auto_Backup）
-            elif [[ $name =~ ^Rime[-_] && $name != "Rime_Auto_Backup" ]]; then
+            elif [[ $name == "Windows-Rime" || ( $name =~ ^Rime[-_] && $name != "Rime_Auto_Backup" ) ]]; then
                 # 尝试从修改时间获取排序键
                 local mtime=$(stat -f "%m" "$entry" 2>/dev/null || echo "0")
                 legacy_entries+=("$mtime"$'\t'"$entry")
@@ -292,31 +292,74 @@ clean_backups() {
 # 统计信息
 show_stats() {
     gather_backups
-    
+
     clear_screen
     show_banner
     printf "${BLUE}备份统计${NC}\n"
     printf "────────────────────────────────────────\n"
-    
+
     printf "源目录: ${CYAN}%s${NC}\n" "$SOURCE_DIR"
     printf "备份目录: ${CYAN}%s${NC}\n" "$BACKUP_BASE"
     echo ""
-    
-    printf "备份总数: ${GREEN}%d${NC}\n" "$BACKUP_TOTAL"
-    
-    # 计算总占用空间
-    if [[ $BACKUP_TOTAL -gt 0 ]]; then
-        local total_size=$(du -sh "$BACKUP_BASE" 2>/dev/null | cut -f1)
-        printf "总占用空间: ${YELLOW}%s${NC}\n" "$total_size"
-        
-        # 最新和最旧备份
-        local newest="${BACKUP_LIST[0]##*/}"
-        local oldest="${BACKUP_LIST[$((BACKUP_TOTAL-1))]##*/}"
+
+    # 按扫描目录分组统计，避免把当前备份目录和历史目录混成一个总数
+    local -a scan_dirs=("$BACKUP_BASE")
+    local extra_dirs=(
+        "/Volumes/Mypssd/iCloud offline/Rime-部分"
+        "/Volumes/Mypssd/iCloud offline/Rime-部分/Rime_Auto_Backup"
+    )
+    local dir
+    for dir in "${extra_dirs[@]}"; do
+        [[ -d "$dir" ]] && scan_dirs+=("$dir")
+    done
+
+    local grand_total=0
+    local grand_kb=0
+    local latest_name=""
+    local oldest_name=""
+    for dir in "${scan_dirs[@]}"; do
+        local dir_count=0
+        local dir_kb=0
+        local path
+        for path in "${BACKUP_LIST[@]}"; do
+            [[ "$path" == "$dir/"* ]] || continue
+            local path_kb
+            path_kb=$(du -sk "$path" 2>/dev/null | awk '{print $1}')
+            dir_kb=$((dir_kb + ${path_kb:-0}))
+            ((dir_count++))
+        done
+        [[ $dir_count -eq 0 ]] && continue
+
+        local dir_size
+        dir_size=$(awk -v kb="$dir_kb" 'BEGIN {
+            if (kb >= 1048576) printf "%.2fG", kb / 1048576;
+            else if (kb >= 1024) printf "%.1fM", kb / 1024;
+            else printf "%dK", kb;
+        }')
+        printf "%-4s ${YELLOW}%3d${NC} 个  ${YELLOW}%8s${NC}  ${GRAY}%s${NC}\n" \
+            "范围" "$dir_count" "$dir_size" "$dir"
+        grand_total=$((grand_total + dir_count))
+        grand_kb=$((grand_kb + dir_kb))
+    done
+
+    if [[ $grand_total -gt 0 ]]; then
+        local total_size
+        total_size=$(awk -v kb="$grand_kb" 'BEGIN {
+            if (kb >= 1048576) printf "%.2fG", kb / 1048576;
+            else if (kb >= 1024) printf "%.1fM", kb / 1024;
+            else printf "%dK", kb;
+        }')
         echo ""
-        printf "最新备份: %s\n" "$newest"
-        printf "最旧备份: %s\n" "$oldest"
+        printf "备份总数: ${GREEN}%d${NC} 个\n" "$grand_total"
+        printf "总占用空间: ${YELLOW}%s${NC}\n" "$total_size"
+
+        latest_name="${BACKUP_LIST[0]##*/}"
+        oldest_name="${BACKUP_LIST[$((BACKUP_TOTAL-1))]##*/}"
+        echo ""
+        printf "最新备份: %s\n" "$latest_name"
+        printf "最旧备份: %s\n" "$oldest_name"
     fi
-    
+
     # Git 状态
     echo ""
     if [[ -d "$BACKUP_BASE/.git" ]]; then
@@ -326,7 +369,7 @@ show_stats() {
     else
         printf "Git 状态: ${GRAY}未初始化${NC}\n"
     fi
-    
+
     printf "────────────────────────────────────────\n"
 }
 
