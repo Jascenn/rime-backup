@@ -36,13 +36,15 @@ brew install rimebak
 ### 手动安装
 
 ```bash
-# 下载脚本
-curl -O https://raw.githubusercontent.com/Jascenn/rime-backup/main/rimebak.sh
-chmod +x rimebak.sh
+# 下载完整源码（v3 起由主脚本 + lib/ 模块目录组成）
+git clone https://github.com/Jascenn/rime-backup.git
+cd rime-backup
 
-# 安装到 PATH (可选)
-sudo mv rimebak.sh /usr/local/bin/rimebak
+# 安装主脚本与功能模块到 /usr/local/bin
+./install.sh
 ```
+
+> 请勿只复制 `rimebak.sh` 单文件：v3 的功能拆在 `lib/` 下，缺少该目录将无法启动。
 
 ### 首次设置
 
@@ -135,6 +137,13 @@ rimebak --help
 排除规则文件：`~/.config/rime_backup/excludes.txt`
 
 ## 📝 更新日志
+
+### v3.0.0
+
+- 代码重构为「主脚本 + `lib/` 模块」结构（core/detect/tui/ops/git_provider/doctor/setup/main）
+- 新增 `rimebak doctor` 环境与冲突诊断
+- 新增 `rimebak setup` 交互式初始化配置
+- Homebrew 安装改为同时安装主脚本与功能模块
 
 ### v2.1.0
 

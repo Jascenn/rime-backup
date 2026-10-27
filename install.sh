@@ -7,10 +7,13 @@ set -euo pipefail
 INSTALL_DIR="/usr/local/bin"
 SCRIPT_NAME="rimebak.sh"
 TARGET_NAME="rimebak"
+LIB_SOURCE_NAME="lib"
+LIB_TARGET_NAME="rimebak_lib"
 
 # 获取脚本所在目录
 SCRIPT_SOURCE_DIR=$(cd "$(dirname "$0")" && pwd)
 SCRIPT_PATH="$SCRIPT_SOURCE_DIR/$SCRIPT_NAME"
+LIB_SOURCE_PATH="$SCRIPT_SOURCE_DIR/$LIB_SOURCE_NAME"
 
 echo "RimeBak 安装程序"
 echo "------------------"
@@ -18,6 +21,12 @@ echo "------------------"
 # 检查 rimebak.sh 是否存在
 if [ ! -f "$SCRIPT_PATH" ]; then
     echo "错误: 找不到 '${SCRIPT_NAME}' 脚本。请确保 '${SCRIPT_NAME}' 与本安装脚本在同一目录下。"
+    exit 1
+fi
+
+# 检查 lib 目录是否存在
+if [ ! -d "$LIB_SOURCE_PATH" ]; then
+    echo "错误: 找不到 '${LIB_SOURCE_NAME}' 目录。请确认从完整仓库或 Release 包中运行本脚本。"
     exit 1
 fi
 
@@ -44,6 +53,15 @@ sudo chmod +x "$INSTALL_DIR/$TARGET_NAME"
 
 if [ $? -ne 0 ]; then
     echo "错误: 设置执行权限失败。"
+    exit 1
+fi
+
+echo "正在复制功能模块到 '${INSTALL_DIR}/${LIB_TARGET_NAME}'..."
+sudo mkdir -p "$INSTALL_DIR/$LIB_TARGET_NAME"
+sudo cp "$LIB_SOURCE_PATH"/*.sh "$INSTALL_DIR/$LIB_TARGET_NAME/"
+
+if [ $? -ne 0 ]; then
+    echo "错误: 复制功能模块失败。请检查权限。"
     exit 1
 fi
 

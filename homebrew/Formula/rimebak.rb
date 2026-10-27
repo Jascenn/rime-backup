@@ -1,8 +1,8 @@
 class Rimebak < Formula
   desc "Rime input method configuration backup and restore tool"
   homepage "https://github.com/Jascenn/rime-backup"
-  url "https://github.com/Jascenn/rime-backup/archive/refs/tags/v2.1.0.tar.gz"
-  sha256 "44cd8c506b90a1d2c913188fd4e9d0350e6589afe5fff77de118651a0caee160"
+  url "https://github.com/Jascenn/rime-backup/archive/refs/tags/v3.0.0.tar.gz"
+  sha256 "SHA256_PLACEHOLDER"
   license "MIT"
   head "https://github.com/Jascenn/rime-backup.git", branch: "main"
 
@@ -10,6 +10,7 @@ class Rimebak < Formula
 
   def install
     bin.install "rimebak.sh" => "rimebak"
+    libexec.install "lib" => "rimebak"
   end
 
   def caveats
@@ -29,6 +30,6 @@ class Rimebak < Formula
   end
 
   test do
-    assert_match "RimeBak v#{version}", shell_output("#{bin}/rimebak --version")
+    assert_match "v#{version}", shell_output("#{bin}/rimebak --version")
   end
 end
