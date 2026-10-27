@@ -1,0 +1,7 @@
+# Repository ownership map. Destructive backup/restore paths and packaging get explicit owners.
+*                           @Jascenn
+/scripts/                   @Jascenn
+/docs/                      @Jascenn
+/homebrew/                  @Jascenn
+/rimebak.sh                 @Jascenn
+/install.sh                 @Jascenn

@@ -169,7 +169,7 @@ rimebak --help
 
 ## 📄 许可证
 
-MIT License
+本项目原创代码采用 [MIT License](LICENSE)。第三方依赖、上游项目与外部素材继续遵循各自许可证。
 
 ---
 
@@ -180,3 +180,8 @@ MIT License
 [![Stars](https://img.shields.io/github/stars/Jascenn/rime-backup?style=social)](https://github.com/Jascenn/rime-backup)
 
 </div>
+
+## 贡献与安全
+
+- 参与开发前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- 安全问题请按 [SECURITY.md](SECURITY.md) 私下报告，不要开公开 Issue。
