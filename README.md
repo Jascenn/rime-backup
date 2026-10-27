@@ -59,7 +59,7 @@ rimebak setup
 rimebak
 
 # 创建备份
-rimebak "升级前备份"
+rimebak backup "升级前备份"
 
 # 查看备份列表
 rimebak list
@@ -85,7 +85,7 @@ rimebak --help
 | 命令 | 说明 |
 |------|------|
 | `rimebak` | 进入交互式菜单 |
-| `rimebak <名称>` | 创建带名称的备份 |
+| `rimebak backup <名称> [备注]` | 创建带名称的备份 |
 | `rimebak list [full]` | 列出所有备份 |
 | `rimebak restore <序号>` | 恢复指定备份 |
 | `rimebak clean` | 交互式清理备份 |

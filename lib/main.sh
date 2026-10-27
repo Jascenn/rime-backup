@@ -204,9 +204,16 @@ dispatch_command() {
         setup) run_setup ;;
         doctor) run_doctor ;;
         about) show_about_ui ;;
+        stats) show_stats ;;
+        backup)
+            do_backup "${1:-}" "${2:-}"
+            ;;
         *)
-            # 默认作为备份名称处理
-            do_backup "$cmd" "${1:-}"
+            log_error "未知命令: $cmd"
+            echo ""
+            printf "创建自定义名称备份请使用: ${GREEN}rimebak backup <名称>${NC}\n"
+            printf "查看全部命令请运行: ${GREEN}rimebak --help${NC}\n"
+            return 2
             ;;
     esac
 }
