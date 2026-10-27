@@ -109,6 +109,16 @@ render_menu_option() {
 show_help_ui() {
     clear_screen
     show_banner
+    printf "${BLUE}命令行用法${NC}\n"
+    printf "  ${GREEN}%-31s${NC} %s\n" "rimebak" "进入交互式菜单"
+    printf "  ${GREEN}%-31s${NC} %s\n" "rimebak backup <名称> [备注]" "创建带名称的备份"
+    printf "  ${GREEN}%-31s${NC} %s\n" "rimebak list [full]" "列出所有备份"
+    printf "  ${GREEN}%-31s${NC} %s\n" "rimebak restore <序号|latest>" "恢复指定备份"
+    printf "  ${GREEN}%-31s${NC} %s\n" "rimebak stats" "查看只读统计"
+    printf "  ${GREEN}%-31s${NC} %s\n" "rimebak doctor" "环境与冲突诊断"
+    printf "  ${GREEN}%-31s${NC} %s\n" "rimebak setup" "重新配置"
+    printf "  ${GREEN}%-31s${NC} %s\n" "rimebak git <init|remote|sync|status>" "Git 同步"
+    echo
     printf "${BLUE}交互快捷键${NC}\n"
     printf "  ${GREEN}%-15s${NC} %s\n" "↑ / ↓ / j / k" "导航选择"
     printf "  ${GREEN}%-15s${NC} → / Enter / l" "确认进入"
@@ -116,8 +126,6 @@ show_help_ui() {
     printf "  ${GREEN}%-15s${NC} 1-9" "直接跳转"
     printf "  ${GREEN}%-15s${NC} q" "退出程序"
     printf "  ${GREEN}%-15s${NC} ?" "显示此帮助"
-    echo
-    read -n 1 -s -r -p "按任意键返回..."
 }
 
 # 关于页面 (PRD v3.3)
